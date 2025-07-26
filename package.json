@@ -1,0 +1,12 @@
+{
+  "name": "selenium-automation",
+  "version": "1.0.0",
+  "scripts": {
+    "test": "mocha tests/*.js"
+  },
+  "dependencies": {
+    "selenium-webdriver": "^4.20.0",
+    "mocha": "^10.0.0",
+    "chromedriver": "^124.0.0"
+  }
+}
