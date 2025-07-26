@@ -1,4 +1,4 @@
-name: Puppeteer Tests (Optimized)
+name: Puppeteer Tests (with Cache)
 
 on: [push, pull_request]
 
@@ -7,16 +7,16 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Setup Node.js
+      - name: Setup Node.js with cache
         uses: actions/setup-node@v3
         with:
           node-version: 20
           cache: 'npm'
 
-      - name: Install dependencies (with cache)
+      - name: Install dependencies with npm ci
         run: npm ci
 
       - name: Run Puppeteer Tests
