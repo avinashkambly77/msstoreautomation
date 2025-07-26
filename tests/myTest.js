@@ -5,7 +5,7 @@ describe('Google Homepage', function () {
   it('should have the correct title', async function () {
     const browser = await puppeteer.launch({
       headless: 'new',
-      args: ['--no-sandbox', '--disable-setuid-sandbox'] // <== Fix here
+      args: ['--no-sandbox', '--disable-setuid-sandbox']
     });
 
     const page = await browser.newPage();
