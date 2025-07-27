@@ -10,7 +10,7 @@ const args = minimist(process.argv.slice(2));
 const VIEWPORT = { width: 1920, height: 1080 };
 
 const allResults = [];
-const failedItems = [];
+const initialFailedItems = [];
 
 function createTestResult(item) {
   return {
@@ -50,7 +50,7 @@ async function closeModals(page) {
   }
 }
 
-async function runTest(item, isRetry = false) {
+async function runTest(item, label = '') {
   const {
     url,
     personalizerId,
@@ -64,7 +64,7 @@ async function runTest(item, isRetry = false) {
     ? `🎯 Recommendation Flow - personalizerId : ${personalizerId} & locale : ${locale}`
     : `🔀 Card Shuffle Flow - personalizerId : ${personalizerId} & locale : ${locale}`;
 
-  describe(`${isRetry ? '♻️ Retry' : '🧪'} ${testTitle} - ${url}`, function () {
+  describe(`${label ? `♻️ Retry ${label}` : '🧪'} ${testTitle} - ${url}`, function () {
     this.timeout(60000);
 
     let browser, page;
@@ -77,7 +77,7 @@ async function runTest(item, isRetry = false) {
         args: ['--no-sandbox', '--disable-setuid-sandbox', `--window-size=${VIEWPORT.width},${VIEWPORT.height}`],
         defaultViewport: null,
       });
-      result.type = isRetry ? `Retry - ${testTitle}` : testTitle;
+      result.type = label ? `Retry ${label} - ${testTitle}` : testTitle;
       page = await browser.newPage();
       await page.setRequestInterception(true);
 
@@ -150,7 +150,6 @@ async function runTest(item, isRetry = false) {
         expect(domOrder[0]).to.equal(rewardActionId);
         expect(domOrder.slice(0, rankOrder.length)).to.deep.equal(rankOrder);
       } catch (error) {
-        failedItems.push(item);
         throw error;
       }
     });
@@ -164,27 +163,45 @@ async function runTest(item, isRetry = false) {
 }
 
 (async () => {
+  // Run all initial tests
   for (const item of personalizerItems) {
-    await runTest(item);
+    try {
+      await runTest(item);
+    } catch (err) {
+      initialFailedItems.push(item);
+    }
   }
 
-  after(async function () {
-    if (failedItems.length > 0) {
-      console.log(`\n🔁 Re-running failed tests (${failedItems.length})...\n`);
-      for (const item of failedItems) {
-        await runTest(item, true);
+  // Retry logic
+  let retryCount = 0;
+  const maxRetries = 2;
+  let currentFailedItems = [...initialFailedItems];
+
+  while (currentFailedItems.length > 0 && retryCount < maxRetries) {
+    retryCount++;
+    console.log(`\n🔁 Retry Attempt ${retryCount} for ${currentFailedItems.length} failed tests...\n`);
+    const newFailures = [];
+
+    for (const item of currentFailedItems) {
+      try {
+        await runTest(item, retryCount);
+      } catch {
+        newFailures.push(item);
       }
     }
 
-    if (allResults.length > 0) {
-      try {
-        await writeExcelReport(allResults, 'personalizer_report');
-        console.log('📊 Excel report successfully written!');
-      } catch (err) {
-        console.error('❌ Failed to write Excel report:', err.message);
-      }
-    } else {
-      console.warn('⚠️ No results to write to Excel.');
+    currentFailedItems = newFailures;
+  }
+
+  // Final report
+  if (allResults.length > 0) {
+    try {
+      await writeExcelReport(allResults, 'personalizer_report');
+      console.log('📊 Excel report successfully written!');
+    } catch (err) {
+      console.error('❌ Failed to write Excel report:', err.message);
     }
-  });
+  } else {
+    console.warn('⚠️ No results to write to Excel.');
+  }
 })();
