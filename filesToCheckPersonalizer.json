@@ -1,0 +1,11 @@
+{
+  "personalizerItems": [
+      {
+       "url":"https://www.microsoft.com/en-au/store/b/surface",
+       "personalizerId":"32788",
+       "elementSelector":".expProductsCarousal .card[data-offerid]",
+        "weight":[0.6,0.3,0.1],
+        "recommendation":true
+      }
+  ]
+}
