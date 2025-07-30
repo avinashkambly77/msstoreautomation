@@ -1,6 +1,7 @@
-name: Puppeteer Tests (with Cache)
+name: Selenium Automation Manual Run
 
-on: [push, pull_request]
+on:
+  workflow_dispatch:  # Enables manual trigger
 
 jobs:
   test:
