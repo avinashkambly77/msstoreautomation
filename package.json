@@ -2,7 +2,7 @@
   "name": "selenium-mocha-test",
   "version": "1.0.0",
   "scripts": {
-    "test": "mocha tests/*.js --browser=chrome"
+    "test": "mocha tests/*.js"
   },
   "author": "",
   "license": "ISC",
