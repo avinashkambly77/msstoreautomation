@@ -114,7 +114,7 @@ function defineTest(item, retryAttempt = 0) {
     : `🔀 Card Shuffle Flow - personalizerId : ${personalizerId} & locale : ${locale}`;
 
   describe(`${label} ${testTitle} - ${url}`, function () {
-    this.timeout(60000);
+    this.timeout(120000);
 
     let browser, page;
     let rankResponse, rewardRequest;
@@ -161,14 +161,31 @@ function defineTest(item, retryAttempt = 0) {
         }
       });
 
-      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 40000 });
+  // Set a common user-agent to help avoid bot detection
+      await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36');
+      // Retry navigation up to 3 times for transient network errors
+      let navAttempts = 0;
+      let navSuccess = false;
+      while (navAttempts < 3 && !navSuccess) {
+        try {
+          await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 90000 });
+          navSuccess = true;
+        } catch (err) {
+          navAttempts++;
+          console.error(`Navigation attempt ${navAttempts} failed:`, err.message);
+          if (navAttempts >= 3) throw err;
+          await new Promise(res => setTimeout(res, 5000)); // Wait before retry
+        }
+      }
       await closeModals(page);
       await new Promise(res => setTimeout(res, 10000));
     });
 
     it(`${personalizerId} - validate rank vs DOM`, async function () {
       try {
-        await page.waitForSelector(elementSelector, { timeout: 40000 });
+  // Wait for network to be idle and add extra delay before searching for the selector
+  await new Promise(res => setTimeout(res, 5000)); // Wait 5 seconds for dynamic content
+  await page.waitForSelector(elementSelector, { timeout: 120000 }); // Increase timeout to 120 seconds
 
         const domOrder = await page.$$eval(`${elementSelector}`, els =>
           els.map(el => el.getAttribute('data-offerid') || el.getAttribute('data-offerkey'))
@@ -177,7 +194,17 @@ function defineTest(item, retryAttempt = 0) {
         expect(domOrder.length).to.be.greaterThan(0);
         expect(rankResponse).to.not.be.null;
 
-        const rankOrder = rankResponse.ranking.map(r => r.id).slice(0, 4);
+        if (!rankResponse || !Array.isArray(rankResponse.ranking)) {
+          console.error('rankResponse validation failed. Full object:', JSON.stringify(rankResponse));
+          // Track failure for retry
+          const currentRetry = testFailures.get(personalizerId) || 0;
+          testFailures.set(personalizerId, currentRetry + 1);
+          throw new Error('rankResponse.ranking is undefined or not an array');
+        }
+
+        const rankOrderLength = Math.min(rankResponse.ranking.length, 4);
+        const rankOrder = rankResponse.ranking.slice(0, rankOrderLength).map(r => r.id);
+
         const rewardActionId = rankResponse.rewardActionId;
 
         result.domOrder = domOrder;
@@ -201,9 +228,16 @@ function defineTest(item, retryAttempt = 0) {
       } catch (error) {
         result.error = error.message;
 
-        // Track failure
-        const currentRetry = testFailures.get(personalizerId) || 0;
-        testFailures.set(personalizerId, currentRetry + 1);
+        // Track failure for selector timeout or other errors
+        if (error.name === 'TimeoutError' && error.message.includes('Waiting for selector')) {
+          console.warn(`Selector not found for personalizerId ${personalizerId}: ${elementSelector}`);
+          const currentRetry = testFailures.get(personalizerId) || 0;
+          testFailures.set(personalizerId, currentRetry + 1);
+        } else {
+          // Track other failures as well
+          const currentRetry = testFailures.get(personalizerId) || 0;
+          testFailures.set(personalizerId, currentRetry + 1);
+        }
 
         // Capture screenshot
         const fileName = await getTimestampedFilename(`${personalizerId}_retry${retryAttempt}`, 'png');
