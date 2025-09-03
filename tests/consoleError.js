@@ -80,15 +80,18 @@ function readExcelAsJson(filePath, sheetName) {
 
   try {
     const workbook = XLSX.readFile(filePath);
+    console.log('Available sheet names:', workbook.SheetNames);
     const sheet = workbook.Sheets[sheetName];
     if (!sheet) {
-      throw new Error(`Sheet '${sheetName}' not found in Excel file.`);
+      throw new Error(`Sheet '${sheetName}' not found in Excel file. Available sheets: ${workbook.SheetNames.join(', ')}`);
     }
     const data = XLSX.utils.sheet_to_json(sheet, { defval: '' });
     return data.map(row => ({
       url: typeof row.url === 'object' ? row.url.hyperlink || row.url.text : row.url,
       experimentId: String(row.exp_id),
-      errorList: typeof row.type === 'string' ? row.type.split(',') : row.type
+      errorList: typeof row.type === 'string'
+        ? row.type.split(',').map(e => e.trim().replace(/^['"]|['"]$/g, ''))
+        : row.type
     }));
   } catch (error) {
     console.error('Error reading Excel file:', error.message);
@@ -103,7 +106,7 @@ const sheetName = 'consoleError';
 
 try {
   pages = readExcelAsJson(excelFilePath, sheetName);
-  console.log('Loaded personalizer items:', pages.length, 'items');
+  console.log('Loaded personalizer items:', pages.length, 'items',pages);
 } catch (err) {
   console.error('Excel read failed:', err.message);
 }
@@ -115,7 +118,7 @@ if (pages.length === 0) {
     {
       url: 'https://example.com',
       experimentId: 'test-exp-1',
-      errorList: ['log', 'pageerror']
+      errorList: ['log', 'pageerror', 'requestfailed']
     }
   ];
 }
@@ -140,22 +143,27 @@ function defineTest() {
       }
     });
 
-    pages.forEach((item) => {
+    pages.forEach((item, idx) => {
       const { url, experimentId, errorList } = item;
 
-      if (!url || !experimentId || !errorList) {
-        console.warn(`Skipping item with missing data: ${JSON.stringify(item)}`);
-        return;
-      }
-      
-      if (!Array.isArray(errorList)) {
-        console.warn(`Invalid errorList for item ${experimentId}: ${errorList}`);
-        return;
-      }
+        // Detailed logging for debugging
+        console.log(`[Row ${idx + 2}] Loaded item:`, JSON.stringify(item));
+        if (!url || !experimentId || !errorList) {
+          console.warn(`[Row ${idx + 2}] Skipping item with missing data. Details:`);
+          if (!url) console.warn(`  - url is missing or invalid.`);
+          if (!experimentId) console.warn(`  - experimentId is missing or invalid.`);
+          if (!errorList) console.warn(`  - errorList is missing or invalid.`);
+          return;
+        }
+
+        if (!Array.isArray(errorList)) {
+          console.warn(`[Row ${idx + 2}] Invalid errorList for item ${experimentId}: ${JSON.stringify(errorList)}`);
+          return;
+        }
 
       it(`should capture console messages for ${url}`, async function() {
         this.timeout(30000); // Per-test timeout
-        
+
         let page;
         try {
           page = await browser.newPage();
@@ -200,7 +208,7 @@ function defineTest() {
           });
 
           // Navigate with better error handling
-          console.log(`Navigating to: ${url}`);
+          console.log(`[Row ${idx + 2}] Navigating to: ${url}`);
           await page.goto(url, { 
             waitUntil: 'networkidle2',
             timeout: 20000 
@@ -210,16 +218,16 @@ function defineTest() {
           await new Promise(resolve => setTimeout(resolve, 5000)); // Reduced wait time
 
           const errors = consoleMessages.filter(msg => msg.message.includes(experimentId));
-          
+
           if (errors.length > 0) {
-            console.log(`Found ${errors.length} errors for ${experimentId}:`, errors);
+            console.log(`[Row ${idx + 2}] Found ${errors.length} errors for ${experimentId}:`, errors);
           }
-          
+
           assert.strictEqual(errors.length, 0, 
             `Console errors found on ${url}: ${JSON.stringify(errors, null, 2)}`);
 
         } catch (error) {
-          console.error(`Test failed for ${url}:`, error.message);
+          console.error(`[Row ${idx + 2}] Test failed for ${url}:`, error.message);
           throw error;
         } finally {
           if (page) {
@@ -254,9 +262,8 @@ function defineTest() {
   });
 }
 
-// Export for testing or run directly
-if (require.main === module) {
-  defineTest();
-} else {
-  module.exports = { defineTest, readExcelAsJson };
-}
+// Always register tests when loaded by Mocha
+defineTest();
+
+// Export helpers for reuse
+module.exports = { defineTest, readExcelAsJson };
